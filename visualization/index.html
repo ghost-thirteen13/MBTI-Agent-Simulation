@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!-- 声明文档类型为HTML5，确保浏览器以标准模式渲染 -->>
+<html lang="zh-CN">
+<!--  设置语言为简体中文，便于搜索引擎和浏览器语言识别 -->>
+<head>
+    <!--  字符编码声明，确保中文等字符正常显示 -->>
+    <meta charset="UTF-8">
+    <!--  视口设置，让页面在移动端也能自适应宽度，禁止用户缩放（user-scalable未设置，默认允许） -->>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--  页面标题，显示在浏览器标签栏 -->>
+    <title>MBTI 囚徒困境 · 可视化</title>
+    <style>
+        /* 
+        页面全局样式：深色背景，内容居中，隐藏溢出
+        构造可视化环境
+        */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0f0f1a;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!--
+        引入PixiJS 7.x 版本的 CDN 资源
+        PixiJS 是 2D WebGL 渲染引擎，用于绘制所有的可视化图形
+    -->
+    <script src="https://pixijs.download/v7.3.2/pixi.min.js"></script>
+    
+    <!-- 
+        内嵌示例博弈数据（模拟 Python 程序输出） 
+        模拟后端 Python 程序输出的多轮博弈结果，用于前端直接渲染
+        避免了实际的网络请求，便于模拟和演示
+        后续本模块要更新，与agent链接，
+        -->
+    <script>
+        const __EMBEDDED_ROUNDS_DATA__ = {
+            "agents": ["INTJ", "ENTJ"],
+            "rounds": [
+                {
+                    "round": 1,
+                    "decision_intj": "C",
+                    "reason_intj": "第一次见面，尝试建立信任基础。",
+                    "decision_entj": "C",
+                    "reason_entj": "评估长期合作可能，先合作为好。",
+                    "payoff_intj": 2,
+                    "payoff_entj": 2
+                },
+                {
+                    "round": 2,
+                    "decision_intj": "C",
+                    "reason_intj": "对方上一轮合作，继续维持。",
+                    "decision_entj": "C",
+                    "reason_entj": "信任初步建立，继续合作。",
+                    "payoff_intj": 2,
+                    "payoff_entj": 2
+                },
+                {
+                    "round": 3,
+                    "decision_intj": "C",
+                    "reason_intj": "尝试提出更优策略，先保持合作。",
+                    "decision_entj": "D",
+                    "reason_entj": "试探对方底线，获取短期高收益。",
+                    "payoff_intj": -1,
+                    "payoff_entj": 3
+                },
+                {
+                    "round": 4,
+                    "decision_intj": "D",
+                    "reason_intj": "遭到背叛，必须报复以维护策略。",
+                    "decision_entj": "C",
+                    "reason_entj": "上一轮获利后转为合作示好。",
+                    "payoff_intj": 3,
+                    "payoff_entj": -1
+                },
+                {
+                    "round": 5,
+                    "decision_intj": "D",
+                    "reason_intj": "对方反复无常，继续背叛。",
+                    "decision_entj": "D",
+                    "reason_entj": "无法信任对方，选择防御。",
+                    "payoff_intj": 0,
+                    "payoff_entj": 0
+                }
+            ]
+        };
+    </script>
+
+    <!-- 我们的模块脚本，注意加载顺序 -->
+    <script src="js/config.js"></script>
+    <script src="js/dataLoader.js"></script>
+    <script src="js/agentPanel.js"></script>
+    <script src="js/historyBar.js"></script>
+    <script src="js/centerStage.js"></script>
+    <script src="js/sceneManager.js"></script>
+    <script src="js/controlBar.js"></script>
+    <script src="js/app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+Agent/
+
+# 环境变量（含 API Key，绝不提交）
+.env
+
+# 运行时生成数据
+logs/
+volumes/
+data/memory/
+environments/desert/data/
+
+# 系统 / 编辑器
+.DS_Store
+.idea/
+.vscode/

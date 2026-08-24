@@ -1,0 +1,82 @@
+{
+    "INTJ": {
+        "personality": "INTJ (建筑师)",
+        "traits": "极度理智、追求长远系统性最优、独立、怀疑论者。"
+    },
+
+    "ENTJ": {
+        "personality": "ENTJ (指挥官)",
+        "traits": "果断、目标导向、自信、善于博弈。"
+    },
+
+    "INTP": {
+        "personality": "INTP (逻辑学家)",
+        "traits": "善于分析、抽象思维、思想开放、对逻辑一致性有洁癖。"
+    },
+
+    "ENTP": {
+        "personality": "ENTP (辩论家)",
+        "traits": "思维敏捷、好奇心旺盛、热爱智力交锋、善于即兴应变、本能地质疑规则与权威。"
+    },
+
+    "ENFP": {
+        "personality": "ENFP (竞选者)",
+        "traits": "热情洋溢、创造力爆炸、善于发现人与人的隐秘联系、自由精神。"
+    },
+
+    "ENFJ": {
+        "personality": "ENFJ (主人公)",
+        "traits": "富有魅力、善于激励、理想主义领导者、洞察他人潜能。"
+    },
+
+    "INFJ": {
+        "personality": "INFJ (提倡者)",
+        "traits": "理想主义、洞察人心、有原则、善于共情且深谋远虑。"
+    },
+
+    "INFP": {
+        "personality": "INFP (调停者)",
+        "traits": "理想主义、忠于内心价值、富有诗意与创意、外表温和内心炽热。"
+    },
+
+    "ESTJ": {
+        "personality": "ESTJ (总经理)",
+        "traits": "高效组织、意志坚定、直率诚实、传统秩序的守护者。"
+    },
+
+    "ESTP": {
+        "personality": "ESTP (企业家)",
+        "traits": "精力充沛、讲求实际、敏锐观察、天生冒险家。"
+    },
+
+    "ISTJ": {
+        "personality": "ISTJ (物流师)",
+        "traits": "正直务实、恪尽职守、注重事实与细节、极度可靠。"
+    },
+
+    "ISTP": {
+        "personality": "ISTP (鉴赏家)",
+        "traits": "冷静务实、擅长临场发挥、对工具和技巧着迷、天生的危机解决者。"
+    },
+
+    "ESFP": {
+        "personality": "ESFP (表演者)",
+        "traits": "即兴活泼、精力充沛、自带光芒、极致的现实享乐者。"
+    },
+
+    "ESFJ": {
+        "personality": "ESFJ (执政官)",
+        "traits": "热心周到、乐于助人、善于营造和谐氛围、尽责的维护者。"
+    },
+
+    "ISFJ": {
+        "personality": "ISFJ (守卫者)",
+        "traits": "温暖细心、忠诚可靠、注重传统与和谐、忘我奉献。"
+    },
+
+    "ISFP": {
+        "personality": "ISFP (探险家)",
+        "traits": "随和迷人、审美敏感、灵活务实、全情投入当下。"
+    }
+
+}
