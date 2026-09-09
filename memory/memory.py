@@ -1,73 +1,59 @@
-# memory.py
+# memory/memory.py
+# RAG 记忆：Milvus 向量库 + 中文句向量模型，为 Agent 提供跨轮次经验检索
 import os
 import numpy as np
-from pathlib import Path
 from pymilvus import connections, Collection
 from sentence_transformers import SentenceTransformer
 
 _model = None
 _collection = None
 
+
 def init_memory(milvus_host="localhost", milvus_port="19530"):
+    """加载句向量模型 + 连接 Milvus，各只执行一次。"""
     global _model, _collection
-    
-    # --- 1. 设置强制离线环境变量 (必须在导入或加载模型前设置) ---
-    os.environ["HF_HUB_OFFLINE"] = "1"  # 关键：强制 Hugging Face Hub 进入离线模式
-    # 保留你的镜像设置，离线模式下它不会被访问，但留着无害
+
+    # 句向量模型缓存目录（放 D 盘，避免占用 C 盘；可被环境变量覆盖）
+    _home = os.environ.get("SENTENCE_TRANSFORMERS_HOME") or r"D:\caches\torch\sentence_transformers"
+    os.environ["SENTENCE_TRANSFORMERS_HOME"] = _home
+    # 首次下载 / 补文件时走国内镜像（离线模式下不会访问）
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-    
-    # 指定一个本地缓存路径，确保它在完全断网时也能读取到
-    os.environ["SENTENCE_TRANSFORMERS_HOME"] = str(Path.home() / ".cache" / "torch" / "sentence_transformers")
+    # 强制离线，从本地缓存加载模型（模型需已下载到位）
+    os.environ["HF_HUB_OFFLINE"] = "1"
 
-    print("⏳ 从本地缓存加载句向量模型 (强制离线模式)...")
-    try:
-        # 模型名称保持不变，库会自动在 SENTENCE_TRANSFORMERS_HOME 指定的路径下查找
-        _model = SentenceTransformer("BAAI/bge-small-zh-v1.5", device="cpu")
-        print("✅ 模型加载成功")
-    except Exception as e:
-        print("❌ 模型加载失败，请检查缓存路径是否正确，以及模型文件是否完整。")
-        print("   尝试的缓存路径:", os.environ["SENTENCE_TRANSFORMERS_HOME"])
-        raise
+    print("[加载] 从本地缓存加载句向量模型 (bge-small-zh-v1.5, 离线)...")
+    _model = SentenceTransformer("BAAI/bge-small-zh-v1.5", device="cpu")
+    print("[OK] 句向量模型加载成功")
 
-    # --- 2. 连接 Milvus ---
     connections.connect(host=milvus_host, port=milvus_port)
     _collection = Collection("game_memory")
     _collection.load()
-    print("✅ Milvus 记忆模块已就绪")
+    print("[OK] Milvus 记忆模块已就绪")
 
 
 def _embed(text: str) -> np.ndarray:
     return _model.encode(text, normalize_embeddings=True)
 
 
-def store_experience(environment: str,
-                     experiment_id: str,
-                     agent_mbti: str,
-                     opponent_mbti: str,
-                     round_num: int,
-                     my_action: str,
-                     opponent_action: str,
-                     my_payoff: float,
-                     opponent_payoff: float,
-                     context_text: str):
+def store_experience(experiment_id, agent_mbti, opponent_mbti, round_num,
+                     my_action, opponent_action, my_payoff, opponent_payoff,
+                     context_text):
+    """写入一条经验。字段与 init_milvus.py 建的 Collection 一一对应。"""
     vec = _embed(context_text).tolist()
-    data = [[environment], [experiment_id], [agent_mbti], [opponent_mbti], [round_num],
-            [my_action], [opponent_action],
-            [my_payoff], [opponent_payoff],
-            [context_text], [vec]]
+    data = [
+        [experiment_id], [agent_mbti], [opponent_mbti], [round_num],
+        [my_action], [opponent_action], [my_payoff], [opponent_payoff],
+        [context_text], [vec]
+    ]
     _collection.insert(data)
     _collection.flush()
 
 
-def retrieve_similar(environment: str,
-                     agent_mbti: str,
-                     experiment_id: str,
-                     query_text: str,
-                     top_k: int = 5) -> list:
+def retrieve_similar(agent_mbti, experiment_id, query_text, top_k=5):
+    """按「实验ID + 人格」过滤，检索语义最相近的 top_k 条经验。"""
     query_vec = _embed(query_text).tolist()
     search_params = {"metric_type": "IP", "params": {"nprobe": 16}}
-    # 三重过滤：环境 + 实验ID + 人格
-    expr = f'environment == "{environment}" and experiment_id == "{experiment_id}" and agent_mbti == "{agent_mbti}"'
+    expr = f'experiment_id == "{experiment_id}" and agent_mbti == "{agent_mbti}"'
     results = _collection.search(
         data=[query_vec],
         anns_field="context_vector",

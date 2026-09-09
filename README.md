@@ -40,11 +40,15 @@
 
 ## 快速开始
 
+> 环境说明：本项目需要 **Python 3.11**。本机默认 `python` 可能指向 3.14 空环境，请统一使用 `py -3.11`。
+
 ### 1. 安装依赖
 
 ```bash
-pip install -r requirements.txt
+py -3.11 -m pip install -r requirements.txt
 ```
+
+> `sentence-transformers` 会连带安装 `torch`/`transformers`（约数 GB）。若只想先跑通核心链路，可只装 `openai python-dotenv`，用 `--no-rag` 模式运行。
 
 ### 2. 配置 API Key
 
@@ -52,26 +56,42 @@ pip install -r requirements.txt
 cp .env.example .env   # 然后编辑 .env，填入 DEEPSEEK_API_KEY
 ```
 
-代码统一通过 `os.environ.get("DEEPSEEK_API_KEY")` 读取，**不再硬编码任何 key**。
+代码统一通过 `os.environ.get("DEEPSEEK_API_KEY")` 读取（`load_dotenv()` 自动加载 `.env`），**不硬编码任何 key**。
 
-### 3. 启动 Milvus（记忆检索需要）
+### 3. 先跑通核心链路（无 RAG，无需 Milvus）
+
+```bash
+py -3.11 main.py --no-rag               # 单组 INTJ vs ENTJ，默认 10 轮
+py -3.11 main.py --no-rag --rounds 50   # 指定 50 轮
+```
+
+### 4. 启用 RAG 记忆（需要 Milvus + 句向量模型）
 
 ```bash
 docker compose up -d          # 启动 etcd + minio + milvus standalone
-python init_milvus.py         # 初始化 game_memory 集合
+py -3.11 init_milvus.py       # 初始化 game_memory 集合（首次）
 ```
 
-> 句向量模型 `bge-small-zh-v1.5` 会从本地缓存加载（强制离线模式），首次运行前请确保已下载。
-
-### 4. 运行实验
+句向量模型 `bge-small-zh-v1.5` 需先下载到本地缓存（约 100MB，放 D 盘）：
 
 ```bash
-python main.py          # 囚徒困境：单组对战（INTJ vs ENTJ）
-python main1.py         # 囚徒困境：16 种 MBTI 两两全量对战
-python main_desert.py   # 沙漠困境：网格生存博弈
+py -3.11 -c "import os; os.environ['HF_ENDPOINT']='https://hf-mirror.com'; os.environ['SENTENCE_TRANSFORMERS_HOME']=r'D:\caches\torch\sentence_transformers'; from sentence_transformers import SentenceTransformer; SentenceTransformer('BAAI/bge-small-zh-v1.5', device='cpu'); print('下载完成')"
 ```
 
-## 📁 目录结构
+然后运行：
+
+```bash
+py -3.11 main.py              # 有 RAG：单组对战
+py -3.11 main1.py             # 有 RAG：16 种 MBTI 两两全量对战（240 组）
+```
+
+> 运行时 `memory.py` 以强制离线模式从 `D:\caches\torch\sentence_transformers` 加载模型，不联网。
+
+### 5. 沙漠困境（暂未适配新 agent）
+
+`main_desert.py` 依赖旧版「沙漠版」Agent（`act()` 接口），本次重构未覆盖，暂不可用，留待后续适配。
+
+## 目录结构
 
 ```
 ├── core/                    # 核心逻辑
@@ -91,7 +111,7 @@ python main_desert.py   # 沙漠困境：网格生存博弈
 └── init_milvus.py           # Milvus 集合初始化
 ```
 
-## 🖥️ 前端可视化（PixiJS）
+## 前端可视化（PixiJS）
 
 网页端用 PixiJS 引擎实现博弈过程的图形化回放，按职责拆为 8 个模块，由状态机（`sceneManager`）驱动：
 

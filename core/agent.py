@@ -1,110 +1,55 @@
-# Agent类
-
 # core/agent.py
+# MBTIAgent：把 MBTI 人格注入大模型，让它在囚徒困境中做出 C/D 决策
 
-import json
-import re
-import random
 import os
-import sys
+import re
 from openai import OpenAI
 from httpx import Timeout
 
-# 确保能导入 config
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from environments.desert.config import DesertConfig
-
 
 class MBTIAgent:
-    # 天气中文到英文映射
-    WEATHER_CN2EN = {
-        '晴天': 'sunny',
-        '高温': 'hot',
-        '沙暴': 'sandstorm'
-    }
+    """MBTI 人格 Agent，调用 DeepSeek 大模型做囚徒困境决策（输出 C 或 D）。"""
 
-    def __init__(self, mbti_type: str, profile_file: str = None,
+    def __init__(self, mbti_type: str, profile: dict = None,
                  api_key: str = None,
                  base_url: str = "https://api.deepseek.com",
-                 model: str = "deepseek-v4-pro"):
+                 model: str = "deepseek-chat"):
         self.mbti_type = mbti_type
         self.model = model
+        self.total_score = 0  # 累计得分，由 runner 每轮累加
 
-        # API Key：环境变量优先，其次传入参数，最后测试用临时回退
+        # API Key：传入参数优先，其次环境变量
         if api_key is None:
             api_key = os.environ.get("DEEPSEEK_API_KEY")
         if not api_key:
-            raise ValueError("未找到 API Key：请设置环境变量 DEEPSEEK_API_KEY")
+            raise ValueError("未找到 API Key：请设置环境变量 DEEPSEEK_API_KEY 或传入 api_key 参数")
         self.client = OpenAI(
             api_key=api_key,
             base_url=base_url,
             timeout=Timeout(10.0, read=120.0, write=10.0, connect=5.0)
         )
 
-        # 加载 MBTI 人格配置
-        if profile_file is None:
-            base_dir = os.path.dirname(os.path.abspath(__file__))
-            profile_file = os.path.join(base_dir, "..", "config", "mbti_profiles.json")
-        try:
-            with open(profile_file, "r", encoding="utf-8") as f:
-                profiles = json.load(f)
-        except FileNotFoundError:
-            print(f"[警告] 未找到人格配置文件 {profile_file}，使用默认系统提示。")
-            profiles = {}
-        self.profile = profiles.get(mbti_type, {})
+        # 人格配置：直接收 dict（含 personality / traits）
+        self.profile = profile or {}
+        personality = self.profile.get("personality", mbti_type)
+        traits = self.profile.get("traits", "")
+        self.system_prompt = self._build_system_prompt(personality, traits)
 
-        default_sys = (
-            f"你是一名 {mbti_type} 型人格的沙漠穿越者。\n"
-            "你的核心目标是：**在保证生存的前提下，尽快抵达终点，同时最大化剩余资金**。\n"
-            "请综合地图信息、当前资源、天气与记忆，做出经得起推敲的理性决策。"
+    def _build_system_prompt(self, personality: str, traits: str) -> str:
+        """构造囚徒困境专用的、注入 MBTI 人格的 system prompt。"""
+        return (
+            f"你正在参与一场反复进行的囚徒困境博弈，你的人格是 {personality}。\n"
+            f"你的人格特质：{traits}\n\n"
+            "博弈规则：每一轮你与对手各自在「合作(C)」与「背叛(D)」之间做出选择，"
+            "双方选择同时揭晓，按如下矩阵计分：\n"
+            "- 都合作(C,C)：双方各 +2\n"
+            "- 你合作、对方背叛(C,D)：你 -1，对方 +3\n"
+            "- 你背叛、对方合作(D,C)：你 +3，对方 -1\n"
+            "- 都背叛(D,D)：双方各 +0\n\n"
+            "你的目标：在始终符合你人格特质的前提下，追求多轮累计得分最大化。\n"
+            "你会看到最近几轮的历史与可选的经验记忆，请基于它们，"
+            "以你的人格视角做出经得起推敲的决策。"
         )
-        self.system_prompt = self.profile.get("system_prompt", default_sys)
-
-    @staticmethod
-    def _build_action_desc(valid_actions):
-        mapping = {
-            0: "0-上", 1: "1-下", 2: "2-左", 3: "3-右",
-            4: "4-停留", 5: "5-挖掘(仅矿山)", 6: "6-购买补给(仅村庄)"
-        }
-        return "、".join(mapping[a] for a in valid_actions if a in mapping)
-
-    def _obs_to_prompt(self, obs: dict):
-        node = obs['node']
-        node_type = obs['type']
-        water = obs['water']
-        food = obs['food']
-        money = obs['money']
-        weather_cn = obs['weather']
-        map_desc = obs.get('map_desc', '无地图信息')
-
-        # 计算可用动作
-        valid_actions = [0, 1, 2, 3, 4]
-        if node_type == 'mine':
-            valid_actions.append(5)
-        if node_type == 'village':
-            valid_actions.append(6)
-
-        # 获取英文天气键，用于查询消耗
-        weather_en = self.WEATHER_CN2EN.get(weather_cn, 'sunny')
-        base_water = DesertConfig.WATER_CONSUME[weather_en]
-        base_food = DesertConfig.FOOD_CONSUME[weather_en]
-
-        # 拼接决策信息
-        desc = f"""当前状态：
-{map_desc}
-当前位置：节点{node}（{node_type}）
-天气：{weather_cn}
-资源：水 {water:.1f} 箱, 食物 {food:.1f} 箱
-资金：{money:.1f} 元
-基础消耗（水/食物）：{base_water}/{base_food} 箱/天
-移动消耗：{DesertConfig.ACTION_CONSUME_MULT['move']}倍基础，挖掘消耗：{DesertConfig.ACTION_CONSUME_MULT['mine']}倍基础，停留/购买消耗：1倍基础
-挖矿收益：{DesertConfig.BASE_MINING_INCOME}元/天
-村庄购买：水{DesertConfig.WATER_PRICE * DesertConfig.VILLAGE_PRICE_MULT}元/箱，食物{DesertConfig.FOOD_PRICE * DesertConfig.VILLAGE_PRICE_MULT}元/箱（单次上限{DesertConfig.MAX_WATER}箱）
-目的地退回：水{DesertConfig.WATER_PRICE * DesertConfig.END_RETURN_MULT}元/箱，食物{DesertConfig.FOOD_PRICE * DesertConfig.END_RETURN_MULT}元/箱
-可用动作：{self._build_action_desc(valid_actions)}"""
-        if 6 in valid_actions:
-            desc += "\n若选择6，需指定购买数量，格式: [Action] 6 [Buy water: 30 food: 20]"
-        return desc, valid_actions
 
     def _call_llm(self, messages):
         try:
@@ -112,7 +57,7 @@ class MBTIAgent:
                 model=self.model,
                 messages=messages,
                 temperature=0.7,
-                max_tokens=4096,   # 足够长的输出，但避免极端值
+                max_tokens=2048,
                 stream=False
             )
             if not completion.choices:
@@ -123,12 +68,18 @@ class MBTIAgent:
             print(f"[LLM调用失败] {e}")
             return None
 
-    def act(self, obs: dict, agent_id: int = 0, memory_context: str = ""):
-        desc, valid_actions = self._obs_to_prompt(obs)
-        user_message = f"{desc}\n\n"
+    def decide(self, state_description: str, memory_context: str = ""):
+        """
+        做出本轮决策。
+        参数：
+            state_description: 当前局势的自然语言描述
+            memory_context:    检索到的历史经验（可选，无 RAG 时为空串）
+        返回：(move, thought)，move 为 'C' 或 'D'，thought 为完整思考文本
+        """
+        user_message = f"{state_description}\n\n"
         if memory_context:
             user_message += f"历史经验提示：\n{memory_context}\n\n"
-        user_message += "请在思考后输出最终动作，格式： [Action] 编号 [可选参数]"
+        user_message += "请先思考，然后只输出你的最终动作，格式： [Action] C 或 [Action] D"
 
         messages = [
             {"role": "system", "content": self.system_prompt},
@@ -137,44 +88,28 @@ class MBTIAgent:
 
         full_reply = self._call_llm(messages)
         if not full_reply:
-            # LLM 调用失败，安全动作：停留
-            print(f"[回退] Agent{agent_id} LLM 无回复，强制停留")
-            return 4, "[LLM无回复]", None
+            # LLM 调用失败，安全默认：合作
+            print(f"[回退] {self.mbti_type} LLM 无回复，默认合作 C")
+            return "C", "[LLM无回复]"
 
-        # 实时打印思考过程（可注释以减少刷屏）
-        print(f"[思考: Agent{agent_id}] {full_reply[:200]}...")  # 只打印前200字符，避免过长
+        move = self._parse_move(full_reply)
+        return move, full_reply
 
-        # 解析动作
-        match = re.search(r'\[Action\]\s*(\d+)', full_reply, re.IGNORECASE)
-        action = None
+    @staticmethod
+    def _parse_move(reply: str) -> str:
+        """从 LLM 回复中解析出 C/D，解析失败默认合作 C。"""
+        # 1) 优先匹配 [Action] C / [Action] D
+        match = re.search(r'\[Action\]\s*([CD])', reply, re.IGNORECASE)
         if match:
-            action = int(match.group(1))
-        else:
-            # 宽松匹配：查找第一个 1-6 的数字
-            nums = re.findall(r'\b([1-6])\b', full_reply)
-            if nums:
-                action = int(nums[0])
-                print(f"[解析] 未找到[Action]标签，回退到数字 {action}")
-            else:
-                print(f"[警告] 未找到动作，强制停留。原始回复：{full_reply[:100]}...")
-                return 4, full_reply, None
-
-        # 校验合法性
-        if action not in valid_actions:
-            print(f"[警告] 动作 {action} 不合法（可行动作: {valid_actions}），强制停留。")
-            return 4, full_reply, None
-
-        # 购买参数解析
-        params = None
-        if action == 6:
-            buy_match = re.search(r'\[Buy water:\s*(\d+)\s+food:\s*(\d+)\]', full_reply, re.IGNORECASE)
-            if buy_match:
-                w = int(buy_match.group(1))
-                f = int(buy_match.group(2))
-                params = {'buy_water': w, 'buy_food': f}
-            else:
-                # 默认购买少量，避免无效动作
-                params = {'buy_water': 10, 'buy_food': 10}
-                print("[解析] 未指定购买量，默认各买10箱")
-
-        return action, full_reply, params
+            return match.group(1).upper()
+        # 2) 中文关键词兜底：取最后出现的「合作/背叛」（结论通常在结尾）
+        coop = reply.rfind('合作')
+        defect = reply.rfind('背叛')
+        if coop != -1 or defect != -1:
+            return 'C' if coop > defect else 'D'
+        # 3) 英文字母兜底：取最后一个单独出现的 C/D
+        found = re.findall(r'\b([CD])\b', reply, re.IGNORECASE)
+        if found:
+            return found[-1].upper()
+        print(f"[警告] 未解析出 C/D，默认合作 C。原始回复：{reply[:100]}...")
+        return "C"

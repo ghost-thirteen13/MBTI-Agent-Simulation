@@ -1,16 +1,17 @@
-from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType
+# init_milvus.py
+# 初始化 Milvus 的 game_memory 集合（建表 + 建索引）
+from pymilvus import connections, Collection, FieldSchema, CollectionSchema, DataType, utility
 
 connections.connect(host="localhost", port="19530")
 
-# 如果已存在，先删除
-from pymilvus import utility
+# 已存在则先删除重建，保证 schema 一致
 if utility.has_collection("game_memory"):
-    await utility.drop_collection("game_memory")
+    utility.drop_collection("game_memory")
     print("已删除旧 Collection")
 
 fields = [
     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-    FieldSchema(name="experiment_id", dtype=DataType.VARCHAR, max_length=64),   # 新增
+    FieldSchema(name="experiment_id", dtype=DataType.VARCHAR, max_length=64),
     FieldSchema(name="agent_mbti", dtype=DataType.VARCHAR, max_length=8),
     FieldSchema(name="opponent_mbti", dtype=DataType.VARCHAR, max_length=8),
     FieldSchema(name="round", dtype=DataType.INT64),
@@ -32,4 +33,4 @@ index_params = {
 }
 collection.create_index(field_name="context_vector", index_params=index_params)
 
-print("✅ 新 Collection 'game_memory' 创建成功（含 experiment_id 字段）")
+print("[OK] 新 Collection 'game_memory' 创建成功")
